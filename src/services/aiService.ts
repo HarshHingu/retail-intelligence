@@ -123,9 +123,10 @@ export async function generateCampaignAI(targetSegment: string, goal: string) {
   await dbConnect();
 
   // 1. Get segment intelligence
-  const customerCount = await Customer.countDocuments({ segment: targetSegment });
+  const dbSegment = targetSegment === "AtRisk" ? "At Risk" : targetSegment;
+  const customerCount = await Customer.countDocuments({ segment: dbSegment });
   const segmentStats = await Customer.aggregate([
-    { $match: { segment: targetSegment } },
+    { $match: { segment: dbSegment } },
     {
       $group: {
         _id: null,

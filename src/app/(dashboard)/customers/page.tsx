@@ -13,6 +13,9 @@ import {
   Mail,
   Phone,
   User,
+  UserPlus,
+  X,
+  RefreshCw,
 } from "lucide-react";
 
 interface Customer {
@@ -36,12 +39,29 @@ interface SegmentsData {
   dormant: Customer[];
 }
 
+const CATEGORIES = ["Grocery", "Apparel", "Electronics", "Home & Kitchen", "Books", "Beauty"];
+const COHORTS = ["VIP", "Loyal", "New", "At Risk", "Dormant"];
+
 export default function CustomersPage() {
   const [data, setData] = useState<SegmentsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "vip" | "loyal" | "new" | "atRisk" | "dormant">("all");
+
+  // Modal States
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  // Form States
+  const [formName, setFormName] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+  const [formCategory, setFormCategory] = useState("Grocery");
+  const [formSegment, setFormSegment] = useState("New");
+  const [formSpend, setFormSpend] = useState("");
+  const [formOrders, setFormOrders] = useState("");
 
   useEffect(() => {
     fetchSegments();
@@ -62,6 +82,56 @@ export default function CustomersPage() {
       setError(err.message || "An error occurred");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddCustomerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName || !formEmail || !formPhone || !formCategory || !formSegment) {
+      setModalError("Please fill out all required fields.");
+      return;
+    }
+
+    try {
+      setModalLoading(true);
+      setModalError(null);
+      const res = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formName,
+          email: formEmail,
+          phone: formPhone,
+          preferredCategory: formCategory,
+          segment: formSegment,
+          totalSpend: Number(formSpend) || 0,
+          totalOrders: Number(formOrders) || 0,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to add customer");
+      }
+
+      // Success Reset
+      setFormName("");
+      setFormEmail("");
+      setFormPhone("");
+      setFormCategory("Grocery");
+      setFormSegment("New");
+      setFormSpend("");
+      setFormOrders("");
+      setModalError(null);
+      setShowAddModal(false);
+      
+      // Refresh customer segments list
+      fetchSegments();
+    } catch (err: any) {
+      console.error(err);
+      setModalError(err.message || "Error adding customer");
+    } finally {
+      setModalLoading(false);
     }
   };
 
@@ -122,6 +192,7 @@ export default function CustomersPage() {
         return "bg-purple-500/10 text-purple-400 border border-purple-500/20";
       case "NEW":
         return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+      case "AT RISK":
       case "ATRISK":
         return "bg-amber-500/10 text-amber-400 border border-amber-500/20";
       case "DORMANT":
@@ -132,7 +203,7 @@ export default function CustomersPage() {
   };
 
   const getSegmentDisplayName = (segment: string) => {
-    if (segment === "AtRisk") return "At Risk";
+    if (segment === "AtRisk" || segment === "At Risk") return "At Risk";
     return segment;
   };
 
@@ -140,18 +211,27 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-8 pb-12">
-      {/* Search and Filters */}
+      {/* Search and Action Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Search */}
-        <div className="relative w-full md:max-w-md">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
-          <input
-            type="text"
-            placeholder="Search by name, email, phone, category..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl focus:border-indigo-500 focus:outline-none text-sm text-white placeholder-neutral-500 transition-colors"
-          />
+        {/* Search & Add Button Container */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:max-w-xl">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+            <input
+              type="text"
+              placeholder="Search by name, email, phone, category..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-11 pr-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl focus:border-indigo-500 focus:outline-none text-sm text-white placeholder-neutral-500 transition-colors"
+            />
+          </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-3 rounded-xl transition-all cursor-pointer whitespace-nowrap text-sm hover:scale-[1.02]"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Add Customer</span>
+          </button>
         </div>
 
         {/* Sync Indicator */}
@@ -341,6 +421,178 @@ export default function CustomersPage() {
           <p className="text-neutral-400 text-sm">
             We couldn't find any customers matching your search query or segment filters.
           </p>
+        </div>
+      )}
+
+      {/* Modal - Add Customer Form */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop Blur */}
+          <div 
+            onClick={() => setShowAddModal(false)}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-neutral-950 border border-neutral-800 rounded-3xl w-full max-w-md p-6 overflow-hidden shadow-2xl shadow-indigo-500/10">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
+            
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-indigo-400" />
+                <span>Add Customer Profile</span>
+              </h3>
+              <button 
+                onClick={() => setShowAddModal(false)}
+                className="text-neutral-500 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {modalError && (
+              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3.5 rounded-xl text-xs mb-4">
+                {modalError}
+              </div>
+            )}
+
+            <form onSubmit={handleAddCustomerSubmit} className="space-y-4">
+              {/* Name */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold uppercase text-neutral-500 tracking-wider">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Rahul Gupta"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-850 rounded-xl focus:border-indigo-500 focus:outline-none text-sm text-white placeholder-neutral-600 transition-colors"
+                />
+              </div>
+
+              {/* Email & Phone grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold uppercase text-neutral-500 tracking-wider">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="rahul@example.com"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-850 rounded-xl focus:border-indigo-500 focus:outline-none text-sm text-white placeholder-neutral-600 transition-colors"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold uppercase text-neutral-500 tracking-wider">
+                    Phone Number *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="+91 98765 43210"
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-850 rounded-xl focus:border-indigo-500 focus:outline-none text-sm text-white placeholder-neutral-600 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Category & Segment */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold uppercase text-neutral-500 tracking-wider">
+                    Preferred Category *
+                  </label>
+                  <select
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-850 rounded-xl focus:border-indigo-500 focus:outline-none text-sm text-white transition-colors"
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold uppercase text-neutral-500 tracking-wider">
+                    Lifecycle Segment *
+                  </label>
+                  <select
+                    value={formSegment}
+                    onChange={(e) => setFormSegment(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-850 rounded-xl focus:border-indigo-500 focus:outline-none text-sm text-white transition-colors"
+                  >
+                    {COHORTS.map((coh) => (
+                      <option key={coh} value={coh}>
+                        {coh}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Spend & Orders */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold uppercase text-neutral-500 tracking-wider">
+                    Total Spend (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={formSpend}
+                    onChange={(e) => setFormSpend(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-850 rounded-xl focus:border-indigo-500 focus:outline-none text-sm text-white placeholder-neutral-600 transition-colors"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold uppercase text-neutral-500 tracking-wider">
+                    Total Orders
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={formOrders}
+                    onChange={(e) => setFormOrders(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-850 rounded-xl focus:border-indigo-500 focus:outline-none text-sm text-white placeholder-neutral-600 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-neutral-900 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={modalLoading}
+                  className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/10 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                >
+                  {modalLoading ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Creating Profile...</span>
+                    </>
+                  ) : (
+                    <span>Add Customer</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

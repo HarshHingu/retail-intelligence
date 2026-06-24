@@ -34,7 +34,11 @@ const CampaignSchema = new Schema<ICampaign>(
   }
 );
 
+if (mongoose.models.Campaign) {
+  delete (mongoose.models as any).Campaign;
+}
+
 const Campaign: Model<ICampaign> =
-  mongoose.models.Campaign || mongoose.model<ICampaign>("Campaign", CampaignSchema, "campaigns");
+  mongoose.model<ICampaign>("Campaign", CampaignSchema, "campaigns");
 
 export default Campaign;
